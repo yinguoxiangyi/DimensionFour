@@ -25,7 +25,7 @@ class FilterMotionStage(BaseStage):
 
          distance = math.sqrt( ((first[0]-last[0])**2)+((first[1]-last[1])**2) )
 
-         if distance < 100:
+         if distance < 10:
             del tracks[i]
             eliminationCount += 1
          else:

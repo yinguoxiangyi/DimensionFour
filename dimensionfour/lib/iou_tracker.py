@@ -150,7 +150,7 @@ def track_iou(detections, sigma_l, sigma_iou, sigma_p, sigma_len, skip_frames=Fa
     tracks_finished += [track[0] for track in tracks_pending if len(track[0]) >= sigma_p]
     tracks_trimmed = interp_tracks(tracks_finished)
 
-    return tracks_trimmed
+    return tracks_finished
 
 
 def track_iou_matlab_wrapper(detections, sigma_l, sigma_iou, sigma_p, sigma_len, skip_frames=False, n_skip=3):

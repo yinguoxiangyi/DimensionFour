@@ -14,7 +14,7 @@ class AssembleStage(BaseStage):
       super().__init__(args)
 
    def execute(self):
-
+      writed_count = 0
       # Verify input files exist
       for inputPath in self.args.input:
          if not os.path.isfile(inputPath):
@@ -59,77 +59,82 @@ class AssembleStage(BaseStage):
 
          print("[AssembleStage] Output video length: %d" % maxLength)
 
+         input = inputs[0]
          # Overlay videos
          for frameNum in range(0, maxLength):
             
             compiledFrame = np.copy(backgroundModel)
             compiledDetections = []
 
-            for input in inputs:
+            # for input in inputs:
 
-               # get frame from the video
-               hasFrame, frame = input['cap'].read()
-               if hasFrame:
+            # get frame from the video
+            hasFrame, frame = input['cap'].read()
+            if hasFrame:
 
-                  allDetections = input['detections'].get(str(frameNum)) or []
+               allDetections = input['detections'].get(str(frameNum)) or []
 
-                  # Filter detections
-                  detections = []
-                  if self.args.filter:
-                     for detection in allDetections:
-                        if detection['name'] in self.args.filter:
-                           detections.append(detection)
+               # Filter detections
+               detections = []
+               if self.args.filter:
+                  for detection in allDetections:
+                     if detection['name'] in self.args.filter:
+                        detections.append(detection)
+               else:
+                  detections = allDetections
+
+               if len(detections) == 0: 
+                  continue
+               mask = np.zeros(compiledFrame.shape, np.uint8)
+
+               # Draw masks
+               for detection in detections:
+                  (a, b, c, d) = detection['bbox']
+
+                  overlap = False
+                  for bbox in compiledDetections:
+                     if iou(bbox, detection['bbox']) > 0:
+                        overlap = True
+                        break
+
+                  if overlap:
+                     cv2.rectangle(mask,(int(a),int(b)),(int(c),int(d)),(170,170,170), -1)
                   else:
-                     detections = allDetections
+                     cv2.rectangle(mask,(int(a),int(b)),(int(c),int(d)),(255,255,255), -1)
+                     
 
-                  mask = np.zeros(compiledFrame.shape, np.uint8)
+               # Expand and blur the masks
+               kernel = np.ones((7,7),np.uint8)
+               mask = cv2.dilate(mask, kernel, iterations=3)
+               mask = cv2.blur(mask, (10,10))
 
-                  # Draw masks
-                  for detection in detections:
-                     (a, b, c, d) = detection['bbox']
+               # Blend into frame
+               compiledFrame = self.alphaBlend(compiledFrame, frame, mask)
 
-                     overlap = False
-                     for bbox in compiledDetections:
-                        if iou(bbox, detection['bbox']) > 0:
-                           overlap = True
-                           break
+               # Save masks
+               compiledDetections = compiledDetections + [detection['bbox'] for detection in detections]
 
-                     if overlap:
-                        cv2.rectangle(mask,(int(a),int(b)),(int(c),int(d)),(170,170,170), -1)
-                     else:
-                        cv2.rectangle(mask,(int(a),int(b)),(int(c),int(d)),(255,255,255), -1)
-                        
+               # Draw Labels
+               for detection in detections:
+                  (left, top, right, bottom) = detection['bbox']
 
-                  # Expand and blur the masks
-                  kernel = np.ones((7,7),np.uint8)
-                  mask = cv2.dilate(mask, kernel, iterations=3)
-                  mask = cv2.blur(mask, (10,10))
+                  label = input['name']
 
-                  # Blend into frame
-                  compiledFrame = self.alphaBlend(compiledFrame, frame, mask)
+                  left = int(left)
+                  top = int(top)
+                  right = int(right)
+                  bottom = int(bottom)
 
-                  # Save masks
-                  compiledDetections = compiledDetections + [detection['bbox'] for detection in detections]
-
-                  # Draw Labels
-                  for detection in detections:
-                     (left, top, right, bottom) = detection['bbox']
-
-                     label = input['name']
-
-                     left = int(left)
-                     top = int(top)
-                     right = int(right)
-                     bottom = int(bottom)
-
-                     #Display the label at the top of the bounding box
-                     labelSize, baseLine = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.25, 2)
-                     top = max(top, labelSize[1])
-                     cv2.putText(compiledFrame, label, (left, top), cv2.FONT_HERSHEY_SIMPLEX, 0.50, (255,255,255), 2)
+                  #Display the label at the top of the bounding box
+                  labelSize, baseLine = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.25, 2)
+                  top = max(top, labelSize[1])
+                  cv2.putText(compiledFrame, label, (left, top), cv2.FONT_HERSHEY_SIMPLEX, 0.50, (255,255,255), 2)
 
             vout.write(compiledFrame.astype(np.uint8))
+            writed_count += 1
 
          vout.release()
+         print("[AssembleStage] Output video frames is %d" % writed_count)
          for input in inputs:
             input['cap'].release()
    
